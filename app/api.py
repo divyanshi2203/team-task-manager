@@ -8,7 +8,7 @@ from flask import Blueprint, abort, jsonify, request
 from flask_login import current_user, login_required
 
 from app import db
-from app.models import Project, Task, TASK_STATUSES
+from app.models import Project, Task
 
 api_bp = Blueprint("api", __name__)
 
@@ -72,13 +72,15 @@ def list_tasks(project_id):
 @login_required
 def create_task(project_id):
     project = _project_or_403(project_id)
+    project.ensure_statuses()
     data = request.get_json(silent=True) or {}
     title = (data.get("title") or "").strip()
     if not title:
         return jsonify({"error": "title is required"}), 400
     status = data.get("status", "todo")
-    if status not in TASK_STATUSES:
-        return jsonify({"error": f"status must be one of {list(TASK_STATUSES)}"}), 400
+    valid = project.status_keys()
+    if status not in valid:
+        return jsonify({"error": f"status must be one of {valid}"}), 400
 
     task = Task(
         title=title,
@@ -109,7 +111,8 @@ def update_task(task_id):
     if "description" in data:
         task.description = (data["description"] or "").strip()
     if "status" in data:
-        if data["status"] not in TASK_STATUSES:
+        task.project.ensure_statuses()
+        if data["status"] not in task.project.status_keys():
             return jsonify({"error": "invalid status"}), 400
         task.status = data["status"]
     if "assignee_id" in data:

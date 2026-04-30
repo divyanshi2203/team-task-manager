@@ -22,3 +22,17 @@ body {
 footer {
   margin-top: 2rem;
 }
+
+/* Kanban — horizontally scrollable columns of fixed width */
+.kanban-board {
+  scroll-snap-type: x proximity;
+}
+.kanban-col {
+  flex: 0 0 280px;
+  max-width: 280px;
+  scroll-snap-align: start;
+}
+.border-dashed {
+  border: 2px dashed #c8ced3 !important;
+  background: #fafbfc;
+}

@@ -79,6 +79,46 @@ class Project(db.Model):
     tasks = db.relationship(
         "Task", back_populates="project", cascade="all, delete-orphan", lazy="dynamic"
     )
+    statuses = db.relationship(
+        "ProjectStatus",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="ProjectStatus.position",
+    )
+
+    # --- Status helpers ----------------------------------------------------
+
+    DEFAULT_STATUSES = (
+        # (key, label, bootstrap color)
+        ("todo", "To Do", "secondary"),
+        ("in_progress", "In Progress", "warning"),
+        ("done", "Done", "success"),
+    )
+
+    def ensure_statuses(self) -> None:
+        """Seed default statuses if this project has none.
+
+        Lets us add this feature without a separate migration step — old
+        projects auto-pick up the three defaults the first time they're
+        viewed.
+        """
+        if self.statuses:
+            return
+        for pos, (key, label, color) in enumerate(self.DEFAULT_STATUSES):
+            db.session.add(
+                ProjectStatus(
+                    project_id=self.id,
+                    key=key,
+                    label=label,
+                    color=color,
+                    position=pos,
+                    is_default=True,
+                )
+            )
+        db.session.commit()
+
+    def status_keys(self) -> list:
+        return [s.key for s in self.statuses]
 
     def members(self):
         """Return all User objects with access (owner + memberships)."""
@@ -120,9 +160,37 @@ class Membership(db.Model):
 
 
 # ---------------------------------------------------------------------------
+# Project statuses (kanban columns)
+# ---------------------------------------------------------------------------
+
+class ProjectStatus(db.Model):
+    __tablename__ = "project_statuses"
+    __table_args__ = (
+        db.UniqueConstraint("project_id", "key", name="uq_project_status_key"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=False)
+    key = db.Column(db.String(40), nullable=False)        # machine name; matches Task.status
+    label = db.Column(db.String(60), nullable=False)      # human label shown in UI
+    color = db.Column(db.String(20), default="secondary") # bootstrap variant
+    position = db.Column(db.Integer, default=0, nullable=False)
+    is_default = db.Column(db.Boolean, default=False, nullable=False)
+
+    project = db.relationship("Project", back_populates="statuses")
+
+    @property
+    def task_count(self) -> int:
+        return Task.query.filter_by(
+            project_id=self.project_id, status=self.key
+        ).count()
+
+
+# ---------------------------------------------------------------------------
 # Tasks
 # ---------------------------------------------------------------------------
 
+# Built-in defaults — kept for the dashboard's three sub-counters.
 TASK_STATUSES = ("todo", "in_progress", "done")
 
 
@@ -160,6 +228,11 @@ class Task(db.Model):
 
     @property
     def status_label(self) -> str:
+        # Look up the project's status row first so custom columns get
+        # their human label; fall back to the default mapping.
+        for s in self.project.statuses:
+            if s.key == self.status:
+                return s.label
         return {"todo": "To Do", "in_progress": "In Progress", "done": "Done"}.get(
             self.status, self.status
         )

@@ -1,5 +1,7 @@
 """Project + team-membership routes."""
-from flask import Blueprint, abort, flash, redirect, render_template, url_for
+import re
+
+from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app import db
@@ -9,7 +11,11 @@ from app.decorators import (
     project_manage_required,
 )
 from app.forms import AddMemberForm, ProjectForm
-from app.models import Membership, Project, User
+from app.models import Membership, Project, ProjectStatus, User
+
+ALLOWED_STATUS_COLORS = {
+    "primary", "secondary", "success", "danger", "warning", "info", "dark",
+}
 
 projects_bp = Blueprint("projects", __name__)
 
@@ -46,6 +52,7 @@ def new_project():
 @login_required
 @project_access_required
 def detail(project_id, project):
+    project.ensure_statuses()  # backfill defaults for old projects
     member_form = AddMemberForm()
     return render_template(
         "projects/detail.html",
@@ -103,3 +110,72 @@ def delete_project(project_id, project):
     db.session.commit()
     flash("Project deleted.", "info")
     return redirect(url_for("projects.list_projects"))
+
+
+# ---------------------------------------------------------------------------
+# Custom kanban columns (statuses)
+# ---------------------------------------------------------------------------
+
+@projects_bp.route("/<int:project_id>/statuses/add", methods=["POST"])
+@login_required
+@project_manage_required
+def add_status(project_id, project):
+    project.ensure_statuses()
+    label = (request.form.get("label") or "").strip()
+    color = (request.form.get("color") or "info").strip()
+
+    if not label:
+        flash("Column name is required.", "danger")
+        return redirect(url_for("projects.detail", project_id=project.id))
+    if len(label) > 60:
+        flash("Column name is too long (max 60 chars).", "danger")
+        return redirect(url_for("projects.detail", project_id=project.id))
+
+    # Slugify the label into a stable machine key.
+    key = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
+    if not key:
+        flash("Column name must contain letters or numbers.", "danger")
+        return redirect(url_for("projects.detail", project_id=project.id))
+
+    if ProjectStatus.query.filter_by(project_id=project.id, key=key).first():
+        flash(f"A column called '{label}' already exists.", "warning")
+        return redirect(url_for("projects.detail", project_id=project.id))
+
+    next_pos = (max((s.position for s in project.statuses), default=-1)) + 1
+    db.session.add(
+        ProjectStatus(
+            project_id=project.id,
+            key=key,
+            label=label,
+            color=color if color in ALLOWED_STATUS_COLORS else "info",
+            position=next_pos,
+            is_default=False,
+        )
+    )
+    db.session.commit()
+    flash(f"Column '{label}' added.", "success")
+    return redirect(url_for("projects.detail", project_id=project.id))
+
+
+@projects_bp.route(
+    "/<int:project_id>/statuses/<int:status_id>/delete", methods=["POST"]
+)
+@login_required
+@project_manage_required
+def delete_status(project_id, project, status_id):
+    status = ProjectStatus.query.get_or_404(status_id)
+    if status.project_id != project.id:
+        abort(403)
+    if status.is_default:
+        flash("Default columns can't be removed.", "warning")
+        return redirect(url_for("projects.detail", project_id=project.id))
+    if status.task_count > 0:
+        flash(
+            f"Move tasks out of '{status.label}' before removing the column.",
+            "warning",
+        )
+        return redirect(url_for("projects.detail", project_id=project.id))
+    db.session.delete(status)
+    db.session.commit()
+    flash(f"Column '{status.label}' removed.", "info")
+    return redirect(url_for("projects.detail", project_id=project.id))

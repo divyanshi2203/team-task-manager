@@ -26,16 +26,28 @@
 </div>
 
 <div class="row g-4">
-  <!-- Tasks board (3 columns) -->
+  <!-- Tasks board (dynamic columns, horizontally scrollable) -->
   <div class="col-lg-9">
-    <div class="row g-3">
-      {% for col_status, col_label, col_color in [('todo','To Do','secondary'), ('in_progress','In Progress','warning'), ('done','Done','success')] %}
-        {% set col_tasks = project.tasks.filter_by(status=col_status).all() %}
-        <div class="col-md-4">
+    <div class="d-flex gap-3 overflow-auto pb-2 align-items-stretch kanban-board">
+      {% for s in project.statuses %}
+        {% set col_tasks = project.tasks.filter_by(status=s.key).all() %}
+        <div class="kanban-col">
           <div class="card shadow-sm h-100">
-            <div class="card-header bg-white d-flex justify-content-between">
-              <strong class="text-{{ col_color }}">{{ col_label }}</strong>
-              <span class="badge bg-{{ col_color }}">{{ col_tasks|length }}</span>
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+              <strong class="text-{{ s.color }}">{{ s.label }}</strong>
+              <span class="d-flex align-items-center gap-2">
+                <span class="badge bg-{{ s.color }}">{{ col_tasks|length }}</span>
+                {% if project.can_manage(current_user) and not s.is_default %}
+                  <form method="post"
+                        action="{{ url_for('projects.delete_status', project_id=project.id, status_id=s.id) }}"
+                        onsubmit="return confirm('Remove the {{ s.label }} column?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-link text-danger p-0" title="Remove column">
+                      <i class="bi bi-x-circle"></i>
+                    </button>
+                  </form>
+                {% endif %}
+              </span>
             </div>
             <div class="list-group list-group-flush">
               {% for t in col_tasks %}
@@ -61,9 +73,9 @@
                     <form method="post" action="{{ url_for('tasks.quick_status', task_id=t.id) }}" class="flex-grow-1">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                       <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
-                        <option value="todo"        {% if t.status=='todo' %}selected{% endif %}>To Do</option>
-                        <option value="in_progress" {% if t.status=='in_progress' %}selected{% endif %}>In Progress</option>
-                        <option value="done"        {% if t.status=='done' %}selected{% endif %}>Done</option>
+                        {% for opt in project.statuses %}
+                          <option value="{{ opt.key }}" {% if t.status == opt.key %}selected{% endif %}>{{ opt.label }}</option>
+                        {% endfor %}
                       </select>
                     </form>
                     {% if project.can_manage(current_user) or t.created_by_id == current_user.id %}
@@ -82,6 +94,40 @@
           </div>
         </div>
       {% endfor %}
+
+      {% if project.can_manage(current_user) %}
+        <div class="kanban-col">
+          <div class="card shadow-sm h-100 border-dashed">
+            <div class="card-header bg-white"><strong>+ Add Column</strong></div>
+            <div class="card-body">
+              <form method="post" action="{{ url_for('projects.add_status', project_id=project.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-2">
+                  <label class="form-label small mb-1">Column name</label>
+                  <input name="label" class="form-control form-control-sm" maxlength="60"
+                         placeholder="e.g. Review" required>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label small mb-1">Color</label>
+                  <select name="color" class="form-select form-select-sm">
+                    <option value="info" selected>Blue</option>
+                    <option value="primary">Indigo</option>
+                    <option value="secondary">Gray</option>
+                    <option value="warning">Amber</option>
+                    <option value="success">Green</option>
+                    <option value="danger">Red</option>
+                    <option value="dark">Dark</option>
+                  </select>
+                </div>
+                <button class="btn btn-sm btn-primary w-100" type="submit">Add</button>
+                <div class="form-text small mt-1">
+                  Default columns can't be removed. Custom columns can only be removed when empty.
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      {% endif %}
     </div>
   </div>
 

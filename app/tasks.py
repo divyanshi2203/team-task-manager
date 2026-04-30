@@ -5,16 +5,19 @@ from flask_login import current_user, login_required
 from app import db
 from app.decorators import project_access_required
 from app.forms import TaskForm
-from app.models import Project, Task, TASK_STATUSES
+from app.models import Project, Task
 
 tasks_bp = Blueprint("tasks", __name__)
 
 
-def _populate_assignee_choices(form: TaskForm, project: Project) -> None:
+def _populate_form_choices(form: TaskForm, project: Project) -> None:
+    """Fill the assignee + status dropdowns from this project's data."""
+    project.ensure_statuses()
     members = project.members()
     form.assignee_id.choices = [(0, "— Unassigned —")] + [
         (u.id, u.username) for u in members
     ]
+    form.status.choices = [(s.key, s.label) for s in project.statuses]
 
 
 @tasks_bp.route("/project/<int:project_id>/new", methods=["GET", "POST"])
@@ -23,7 +26,7 @@ def _populate_assignee_choices(form: TaskForm, project: Project) -> None:
 def new_task(project_id, project):
     # Members can create tasks within projects they belong to.
     form = TaskForm()
-    _populate_assignee_choices(form, project)
+    _populate_form_choices(form, project)
 
     if form.validate_on_submit():
         assignee_id = form.assignee_id.data or None
@@ -53,7 +56,7 @@ def edit_task(task_id):
         abort(403)
 
     form = TaskForm(obj=task)
-    _populate_assignee_choices(form, project)
+    _populate_form_choices(form, project)
     if request.method == "GET":
         form.assignee_id.data = task.assignee_id or 0
 
@@ -82,7 +85,8 @@ def quick_status(task_id):
         abort(403)
 
     new_status = request.form.get("status", "").strip()
-    if new_status not in TASK_STATUSES:
+    task.project.ensure_statuses()
+    if new_status not in task.project.status_keys():
         flash("Invalid status.", "danger")
         return redirect(request.referrer or url_for("main.dashboard"))
 

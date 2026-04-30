@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Sign Up · Team Task Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h4 class="card-title mb-3"><i class="bi bi-person-plus"></i> Create your account</h4>
+        <form method="post" novalidate>
+          {{ form.hidden_tag() }}
+          {% for field in [form.username, form.email, form.password, form.confirm] %}
+          <div class="mb-3">
+            {{ field.label(class="form-label") }}
+            {{ field(class="form-control") }}
+            {% for err in field.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+          </div>
+          {% endfor %}
+          <div class="mb-3">
+            {{ form.role.label(class="form-label") }}
+            {{ form.role(class="form-select") }}
+            <div class="form-text">First user becomes Admin automatically.</div>
+          </div>
+          {{ form.submit(class="btn btn-success w-100") }}
+        </form>
+        <hr>
+        <p class="text-center small mb-0">
+          Already have an account? <a href="{{ url_for('auth.login') }}">Log in</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

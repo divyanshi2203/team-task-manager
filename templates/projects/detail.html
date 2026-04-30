@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h3 class="mb-1">{{ project.name }}</h3>
+    <p class="text-muted mb-0">{{ project.description or "No description." }}</p>
+    <div class="small text-muted mt-1">
+      Owner: <strong>{{ project.owner.username }}</strong>
+      &middot; Created {{ project.created_at.strftime('%b %d, %Y') }}
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-success" href="{{ url_for('tasks.new_task', project_id=project.id) }}">
+      <i class="bi bi-plus-lg"></i> New Task
+    </a>
+    {% if project.can_manage(current_user) %}
+      <form method="post" action="{{ url_for('projects.delete_project', project_id=project.id) }}"
+            onsubmit="return confirm('Delete this project and all its tasks?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-danger"><i class="bi bi-trash"></i></button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Tasks board (3 columns) -->
+  <div class="col-lg-9">
+    <div class="row g-3">
+      {% for col_status, col_label, col_color in [('todo','To Do','secondary'), ('in_progress','In Progress','warning'), ('done','Done','success')] %}
+        {% set col_tasks = project.tasks.filter_by(status=col_status).all() %}
+        <div class="col-md-4">
+          <div class="card shadow-sm h-100">
+            <div class="card-header bg-white d-flex justify-content-between">
+              <strong class="text-{{ col_color }}">{{ col_label }}</strong>
+              <span class="badge bg-{{ col_color }}">{{ col_tasks|length }}</span>
+            </div>
+            <div class="list-group list-group-flush">
+              {% for t in col_tasks %}
+                <div class="list-group-item">
+                  <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('tasks.edit_task', task_id=t.id) }}"
+                       class="fw-semibold text-decoration-none">{{ t.title }}</a>
+                    {% if t.is_overdue %}
+                      <span class="badge bg-danger">Overdue</span>
+                    {% endif %}
+                  </div>
+                  <div class="small text-muted mt-1">
+                    {% if t.assignee %}
+                      <i class="bi bi-person-circle"></i> {{ t.assignee.username }}
+                    {% else %}
+                      <i class="bi bi-person-dash"></i> Unassigned
+                    {% endif %}
+                    {% if t.due_date %}
+                      &middot; <i class="bi bi-calendar"></i> {{ t.due_date.strftime('%b %d') }}
+                    {% endif %}
+                  </div>
+                  <div class="d-flex gap-1 mt-2">
+                    <form method="post" action="{{ url_for('tasks.quick_status', task_id=t.id) }}" class="flex-grow-1">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="todo"        {% if t.status=='todo' %}selected{% endif %}>To Do</option>
+                        <option value="in_progress" {% if t.status=='in_progress' %}selected{% endif %}>In Progress</option>
+                        <option value="done"        {% if t.status=='done' %}selected{% endif %}>Done</option>
+                      </select>
+                    </form>
+                    {% if project.can_manage(current_user) or t.created_by_id == current_user.id %}
+                      <form method="post" action="{{ url_for('tasks.delete_task', task_id=t.id) }}"
+                            onsubmit="return confirm('Delete this task?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-outline-danger btn-sm" title="Delete"><i class="bi bi-trash"></i></button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </div>
+              {% else %}
+                <div class="list-group-item text-center text-muted small py-3">— empty —</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Members -->
+  <div class="col-lg-3">
+    <div class="card shadow-sm">
+      <div class="card-header bg-white"><strong>Team</strong></div>
+      <ul class="list-group list-group-flush">
+        {% for u in project.members() %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>
+              <i class="bi bi-person-circle"></i> {{ u.username }}
+              {% if u.id == project.owner_id %}
+                <span class="badge bg-primary ms-1">Owner</span>
+              {% endif %}
+            </span>
+            {% if project.can_manage(current_user) and u.id != project.owner_id %}
+              <form method="post"
+                    action="{{ url_for('projects.remove_member', project_id=project.id, user_id=u.id) }}"
+                    onsubmit="return confirm('Remove {{ u.username }} from this project?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-x"></i></button>
+              </form>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+      {% if project.can_manage(current_user) %}
+      <div class="card-body">
+        <form method="post" action="{{ url_for('projects.add_member', project_id=project.id) }}">
+          {{ member_form.hidden_tag() }}
+          <label class="form-label small">Add member by username</label>
+          <div class="input-group input-group-sm">
+            {{ member_form.username(class="form-control", placeholder="username") }}
+            <button class="btn btn-primary" type="submit">Add</button>
+          </div>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

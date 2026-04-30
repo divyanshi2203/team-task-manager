@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Projects</h3>
+  {% if current_user.is_admin %}
+    <a class="btn btn-primary" href="{{ url_for('projects.new_project') }}">
+      <i class="bi bi-plus-circle"></i> New Project
+    </a>
+  {% endif %}
+</div>
+
+<div class="row g-3">
+  {% for p in projects %}
+    <div class="col-md-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h5 class="card-title">
+            <a href="{{ url_for('projects.detail', project_id=p.id) }}" class="text-decoration-none">
+              {{ p.name }}
+            </a>
+          </h5>
+          <p class="card-text small text-muted">
+            {{ (p.description or 'No description.')[:120] }}{% if p.description and p.description|length > 120 %}…{% endif %}
+          </p>
+          <div class="small text-muted">
+            <i class="bi bi-person"></i> {{ p.owner.username }}
+            &middot; <i class="bi bi-people"></i> {{ p.members()|length }}
+            &middot; <i class="bi bi-list-check"></i> {{ p.tasks.count() }} tasks
+          </div>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="col-12 text-center text-muted py-5">
+      No projects yet.
+      {% if current_user.is_admin %}
+        <a href="{{ url_for('projects.new_project') }}">Create the first one</a>.
+      {% else %}
+        Ask an admin to add you to one.
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

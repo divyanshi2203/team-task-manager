@@ -144,19 +144,6 @@ Example body for creating a task:
 
 Status values are the keys of the project's columns. The three defaults are `todo`, `in_progress` and `done`. If an admin added a custom column, its key becomes a slug of the label (for example `Review` becomes `review`).
 
-
-## Deployment
-
-The app is deployed on Railway. See `DEPLOYMENT.md` for the step by step guide.
-
-Short version: push the repo to github, new project on railway from the repo, add postgres, reference `DATABASE_URL` from the postgres service into the app service, set a `SECRET_KEY`, generate a public domain. Takes around ten minutes.
-
-
-## How to use it
-
-There is a `walkthrough.txt` in the repo that explains the user flow as both admin and member. Read that for a quick tour.
-
-
 ## Notes
 
 - The first signup becoming admin is intentional. Otherwise nobody could create anything on a fresh database.
